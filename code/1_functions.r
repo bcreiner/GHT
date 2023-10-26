@@ -3,6 +3,37 @@ DALY_to_GHT <- function(x) return(9 - findInterval(x, GHT_bins, all.inside = TRU
 
 
 
+##
+
+optim_function <- function(vals){
+  weights <- create_weights(vals)
+  val <- -ensemble_RPS_by_week(weights,week_to_check,past_pred_array,individual_model_RPS[1,week_to_check])
+  return(val)
+}
+
+create_weights <- function(vals){
+  weights <- rep(0, length(suite_of_models))
+  remaining <- 1
+  for (mod_num in 1:(length(vals) - 1)){
+    weights[mod_num] <- remaining * inv.logit(vals[mod_num])
+    remaining <- 1 - sum(weights)
+  }
+  weights[length(vals)] <- remaining
+  weights[is.na(weights)] <- 0
+  return(weights)
+}
+
+create_vals <- function(weights){
+  vals <- rep(0, length(suite_of_models))
+  vals[1] <- logit(weights[1])
+  if (length(weights) > 2){
+    for (mod_num in 2:(length(weights) - 1)){
+      vals[mod_num] <- logit(weights[mod_num] / (1 - sum(weights[1:(mod_num-1)])))
+    }
+  }
+  return(vals)
+}
+
 
 ## RPS
 #
@@ -75,10 +106,12 @@ ensemble_RPS_by_week <- function(weights, week_num, all_pred_array, constant_rps
 ####
 
 combine_past_and_future <- function(obs_df, pred_df){
-  toss <- sapply(c("Start", "End", "DALYs"), function(x){
+  toss <- unlist(sapply(c("Start", "End", "DALYs"), function(x){
     which(names(obs_df) == x)
-  })
-  obs_df <- obs_df[,-toss]
+  }))
+  if (length(toss)){
+    obs_df <- obs_df[,-toss]
+  }
   
   final_data <- obs_df
   final_data$observed <- 1
@@ -94,11 +127,11 @@ combine_past_and_future <- function(obs_df, pred_df){
   for (pred_week_num in 1:Weeks_Out_To_Model){
     tmp_row <- pred_df[pred_week_num + 1,]
     new_rows$start_date[pred_week_num] <- new_rows$start_date[pred_week_num] + as.numeric(pred_week_num * 7)
-    new_rows$end_date[pred_week_num] <- new_rows$end_date[pred_week_num] + pred_week_num * 7 + 6
+    new_rows$end_date[pred_week_num] <- new_rows$end_date[pred_week_num] + pred_week_num * 7
     new_rows$epi_week[pred_week_num] <- new_rows$epi_week[pred_week_num] + pred_week_num
     tmp_pred_vec <- as.vector(unlist(tmp_row[which(names(tmp_row) %like% "pred_draw")]))
     tmp_GHT_vec <- as.vector(unlist(tmp_row[which(names(tmp_row) %like% "GHT_draw")]))
-    new_rows$dalys_per_100k[pred_week_num] <- mean(tmp_pred_vec)
+    new_rows$dalys_per_100k[pred_week_num] <- median(tmp_pred_vec)
     new_rows[pred_week_num, which(names(new_rows) %like% "Prob")] <- sapply(1:GHT_level_num, 
                                                                             function(x){
                                                                               length(which(tmp_GHT_vec == x)) / draws
@@ -152,3 +185,27 @@ combine_past_and_future <- function(obs_df, pred_df){
 #   }
 # }
 # lines(data$Start, data$GHT, lwd = 3)
+
+
+rescale <- function(vec){
+  vals <- rep(NA, length(vec))
+  for (i in 1:length(vec)){
+    x <- vec[i]
+    level <- findInterval(x, GHT_bins, all.inside = TRUE)
+    if (level == 1){
+      vals[i] <- x/10#max(0, log10(x+1))
+    } else {
+      log10_l <- log10(GHT_bins[level])
+      log10_x <- log10(x)
+      log10_u <- log10(GHT_bins[level + 1])
+      vals[i] <- level + (log10_x - log10_l) / (log10_u - log10_l) - 1
+    }
+  }
+  return(vals)
+}
+
+
+colscale <- function(x){
+  x <- (x + .1) / 1.1
+  x <- x / (1.1)
+}

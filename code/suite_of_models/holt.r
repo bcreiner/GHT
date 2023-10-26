@@ -1,11 +1,14 @@
 ## holt
 #
+# data_frame <- tmp_data
+# time <- today
+
 holt_model <- function(data_frame, time, draws){
   model_name <- "holt"
   
-  tmp_locs <- which(data_frame$Start <= (time - 7*Data_Lag + 7))
+  tmp_locs <- which(data_frame$start_date <= (time - 7*Data_Lag + 7))
   
-  dat_train = log(data_frame$DALYs[tmp_locs]+1e-8)
+  dat_train = log(data_frame$dalys_per_100k[tmp_locs]+1e-8)
 
   dat_ts <- ts(dat_train)
   
@@ -34,7 +37,7 @@ holt_model <- function(data_frame, time, draws){
     tmp_future <- c(0, rep(0, Data_Lag), rep(1, Weeks_Out_To_Model - Data_Lag))
   }
   
-  out_df <- data.frame(week = data_frame$Start[max(tmp_locs)+0:Weeks_Out_To_Model],
+  out_df <- data.frame(week = data_frame$start_date[max(tmp_locs)]+7*(0:Weeks_Out_To_Model),
                        mod_name = rep(model_name, Weeks_Out_To_Model + 1),
                        future = tmp_future,
                        out_type = rep("continuous", Weeks_Out_To_Model + 1),
